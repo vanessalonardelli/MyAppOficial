@@ -290,7 +290,7 @@
         <button class="nb" onclick="pg('perfil')">👤 PERFIL</button>
         <button class="nb" onclick="pg('alimentos')">🍱 ALIMENTOS</button>
         <button class="nb" onclick="pg('atividade')">🔥 TREINO</button>
-        <button class="nb" onclick="pg('gordura')">📐 GORDURA</button>
+        <button class="nb" onclick="pg('gordura')">📐 COMPOSIÇÃO</button>
         <button class="nb" onclick="pg('graficos')">📊 GRÁFICOS</button>
     </div>
 </div>
@@ -389,9 +389,9 @@
             </div>
             <div class="fg"><label>Objetivo</label>
                 <select id="p-goal">
-                    <option value="lose">Perda de peso (−500 kcal)</option>
+                    <option value="lose">Perda de peso</option>
                     <option value="maintain" selected>Manutenção</option>
-                    <option value="gain">Ganho de massa (+300 kcal)</option>
+                    <option value="gain">Ganho de massa</option>
                 </select>
             </div>
 
@@ -457,12 +457,12 @@
                 <div class="fg">
                     <label>Refeição</label>
                     <select id="f-meal">
-                        <option>☀️ Café da manhã</option>
-                        <option>🌤️ Lanche manhã</option>
-                        <option>🌞 Almoço</option>
-                        <option>🌥️ Lanche tarde</option>
-                        <option>🌙 Jantar</option>
-                        <option>⭐ Ceia</option>
+                        <option> Café da manhã</option>
+                        <option> Lanche manhã</option>
+                        <option> Almoço</option>
+                        <option> Lanche tarde</option>
+                        <option> Jantar</option>
+                        <option> Ceia</option>
                     </select>
                 </div>
                 <div class="fg">
@@ -507,7 +507,7 @@
                 <div class="empty"><div class="empty-ic">🍽️</div>Adicione alimentos</div>
             </div>
             <div class="div"></div>
-            <button class="btn btn-red btn-sm" onclick="clrFoods()">🗑️ LIMPAR TUDO</button>
+            <button class="btn btn-red btn-sm" onclick="clrFoods()">LIMPAR TUDO</button>
         </div>
     </div>
 
@@ -521,32 +521,32 @@
             <div class="fg"><label>Tipo de Atividade</label>
                 <select id="a-type" onchange="fillMET()">
                     <option value="">Selecione</option>
-                    <optgroup label="— Cardio">
-                        <option value="🏃 Corrida moderada" data-met="9.8">🏃 Corrida moderada</option>
-                        <option value="🏃 Corrida intensa" data-met="13">🏃 Corrida intensa</option>
-                        <option value="🚶 Caminhada" data-met="3.5">🚶 Caminhada</option>
-                        <option value="🚴 Ciclismo" data-met="7.5">🚴 Ciclismo</option>
-                        <option value="🏊 Natação" data-met="7">🏊 Natação</option>
-                        <option value="⚡ Pular corda" data-met="12">⚡ Pular corda</option>
-                        <option value="🔄 Elíptico" data-met="5">🔄 Elíptico</option>
+                    <optgroup label="CARDIO">
+                        <option value="Corrida moderada" data-met="9.8">Corrida moderada</option>
+                        <option value="Corrida intensa" data-met="13">Corrida intensa</option>
+                        <option value="Caminhada" data-met="3.5">Caminhada</option>
+                        <option value="Ciclismo" data-met="7.5">Ciclismo</option>
+                        <option value="Natação" data-met="7">Natação</option>
+                        <option value="Pular corda" data-met="12">Pular corda</option>
+                        <option value="Elíptico" data-met="5">Elíptico</option>
                     </optgroup>
-                    <optgroup label="— Musculação">
-                        <option value="🏋️ Musculação leve" data-met="3">🏋️ Musculação leve</option>
-                        <option value="🏋️ Musculação moderada" data-met="5">🏋️ Musculação moderada</option>
-                        <option value="🏋️ Musculação intensa" data-met="7">🏋️ Musculação intensa</option>
-                        <option value="🔥 CrossFit" data-met="9">🔥 CrossFit</option>
+                    <optgroup label="MUSCULAÇÃO">
+                        <option value="Musculação leve" data-met="3">Musculação leve</option>
+                        <option value="Musculação moderada" data-met="5">Musculação moderada</option>
+                        <option value="Musculação intensa" data-met="7">Musculação intensa</option>
+                        <option value="CrossFit" data-met="9">CrossFit</option>
                     </optgroup>
-                    <optgroup label="— Esportes">
-                        <option value="⚽ Futebol" data-met="8">⚽ Futebol</option>
-                        <option value="🏀 Basquete" data-met="7">🏀 Basquete</option>
-                        <option value="🎾 Tênis" data-met="6">🎾 Tênis</option>
-                        <option value="🥊 Boxe" data-met="9">🥊 Boxe / Luta</option>
+                    <optgroup label="ESPORTES">
+                        <option value="Futebol" data-met="8">Futebol</option>
+                        <option value="Basquete" data-met="7">Basquete</option>
+                        <option value="Tênis" data-met="6">Tênis</option>
+                        <option value="Boxe" data-met="9">Boxe / Luta</option>
                     </optgroup>
-                    <optgroup label="— Outros">
-                        <option value="🧘 Yoga" data-met="3">🧘 Yoga</option>
-                        <option value="🤸 Pilates" data-met="3.5">🤸 Pilates</option>
-                        <option value="💃 Dança" data-met="5">💃 Dança</option>
-                        <option value="✏️ Personalizado" data-met="0">✏️ Personalizado</option>
+                    <optgroup label="OUTROS">
+                        <option value="Yoga" data-met="3">Yoga</option>
+                        <option value="Pilates" data-met="3.5">Pilates</option>
+                        <option value="Dança" data-met="5">Dança</option>
+                        <option value="Personalizado" data-met="0">Personalizado</option>
                     </optgroup>
                 </select>
             </div>
@@ -576,7 +576,7 @@
                 <div class="empty"><div class="empty-ic">💤</div>Nenhuma atividade</div>
             </div>
             <div class="div"></div>
-            <button class="btn btn-red btn-sm" onclick="clrActs()">🗑️ LIMPAR TUDO</button>
+            <button class="btn btn-red btn-sm" onclick="clrActs()">LIMPAR TUDO</button>
         </div>
     </div>
 

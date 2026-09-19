@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "894275821354",
+    "project_id": "nutricore-a36a6",
+    "storage_bucket": "nutricore-a36a6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:894275821354:android:47521a6dafb3488e5d0853",
+        "android_client_info": {
+          "package_name": "com.nutricore.pro"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAbEjMVB86BJrSFxtl14YMLY9tDUZdlHOM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

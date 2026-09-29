@@ -903,19 +903,113 @@ function pg(id){
 
 // ═══ FOOD SEARCH ═══
 let sugOpen=false;
+let srchTimer=null;
+let apiResults=[];
+
 function srch(val){
   const sug=q('sug');
-  if(!val||val.trim().length<2){sug.classList.remove('on');sugOpen=false;return;}
+  if(!val||val.trim().length<2){sug.classList.remove('on');sugOpen=false;apiResults=[];return;}
+
+  // Busca local imediata
   const term=norm(val.trim());
-  const matches=DB.filter(f=>norm(f[0]).includes(term)).slice(0,8);
-  if(!matches.length){sug.classList.remove('on');sugOpen=false;return;}
-  sug.innerHTML=matches.map(f=>{
-    const idx=DB.indexOf(f);
-    const safe=val.trim().replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-    const hi=f[0].replace(new RegExp('('+safe+')','gi'),'<span class="si-hi">$1</span>');
-    return`<div class="si" onclick="escolherAlimento(${idx})"><div><div class="si-name">${hi}</div><div class="si-meta">P:${f[2]}g C:${f[3]}g G:${f[4]}g — 100g</div></div><div class="si-kcal">${f[1]}</div></div>`;
-  }).join('');
-  sug.classList.add('on');sugOpen=true;
+  const localMatches=DB.filter(f=>norm(f[0]).includes(term)).slice(0,5);
+
+  // Mostra resultados locais imediatamente
+  renderSug(localMatches, [], val.trim());
+
+  // Busca na API com delay (evita muitas requisições)
+  clearTimeout(srchTimer);
+  srchTimer=setTimeout(()=>srchAPI(val.trim(), localMatches), 600);
+}
+
+function srchAPI(val, localMatches){
+  const sug=q('sug');
+
+  // Mostra indicador de carregando
+  if(sug.classList.contains('on')){
+    sug.innerHTML=sug.innerHTML+`<div style="padding:12px 16px;font-family:var(--fm);font-size:10px;color:var(--grey);display:flex;align-items:center;gap:8px"><span class="spinner" style="width:12px;height:12px;border-width:1px"></span>Buscando na API...</div>`;
+  }
+
+  // Guarda os matches locais para usar no callback
+  window._localMatches=localMatches;
+  window._srchVal=val;
+
+  // Chama o Kotlin para fazer a requisição
+  try{
+    if(typeof AndroidAPI !== 'undefined'){
+      AndroidAPI.buscarAlimentos(val);
+    } else {
+      console.log('AndroidAPI não disponível');
+      renderSug(localMatches, [], val);
+    }
+  }catch(e){
+    console.log('Erro ao chamar AndroidAPI:', e);
+    renderSug(localMatches, [], val);
+  }
+}
+
+// Função chamada pelo Kotlin com o resultado
+function receberResultadoAPI(jsonStr){
+  const localMatches=window._localMatches||[];
+  const val=window._srchVal||'';
+
+  if(!jsonStr){
+    renderSug(localMatches, [], val);
+    return;
+  }
+
+  try{
+    const data=JSON.parse(jsonStr);
+    apiResults=[];
+    if(data.products){
+      for(const p of data.products){
+        const name=p.product_name;
+        const n=p.nutriments||{};
+        const kcal=Math.round(n['energy-kcal_100g']||n['energy_100g']/4.184||0);
+        const prot=parseFloat((n['proteins_100g']||0).toFixed(1));
+        const carb=parseFloat((n['carbohydrates_100g']||0).toFixed(1));
+        const fat=parseFloat((n['fat_100g']||0).toFixed(1));
+        if(!name||!kcal)continue;
+        apiResults.push({name,kcal,prot,carb,fat,brand:p.brands||''});
+      }
+    }
+    renderSug(localMatches, apiResults, val);
+  }catch(e){
+    console.log('Erro ao processar resultado API:', e);
+    renderSug(localMatches, [], val);
+  }
+}
+
+function renderSug(localMatches, apiMatches, val){
+  const sug=q('sug');
+  if(!localMatches.length&&!apiMatches.length){sug.classList.remove('on');sugOpen=false;return;}
+
+  const safe=val.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+
+  // Resultados locais
+  let html='';
+  if(localMatches.length){
+    html+=`<div style="padding:6px 14px;font-family:var(--fm);font-size:8px;color:var(--grey);text-transform:uppercase;letter-spacing:2px;background:var(--s4)">📦 Banco Local</div>`;
+    html+=localMatches.map(f=>{
+      const idx=DB.indexOf(f);
+      const hi=f[0].replace(new RegExp('('+safe+')','gi'),'<span class="si-hi">$1</span>');
+      return`<div class="si" onclick="escolherAlimento(${idx})"><div><div class="si-name">${hi}</div><div class="si-meta">P:${f[2]}g C:${f[3]}g G:${f[4]}g — 100g</div></div><div class="si-kcal">${f[1]}</div></div>`;
+    }).join('');
+  }
+
+  // Resultados da API
+  if(apiMatches.length){
+    html+=`<div style="padding:6px 14px;font-family:var(--fm);font-size:8px;color:var(--cyan);text-transform:uppercase;letter-spacing:2px;background:var(--s4)">🌐 Open Food Facts</div>`;
+    html+=apiMatches.map((f,i)=>{
+      const hi=f.name.replace(new RegExp('('+safe+')','gi'),'<span class="si-hi">$1</span>');
+      const sub=f.brand?`${f.brand} · `:''
+      return`<div class="si" onclick="escolherAlimentoAPI(${i})"><div><div class="si-name">${hi}</div><div class="si-meta">${sub}P:${f.prot}g C:${f.carb}g G:${f.fat}g — 100g</div></div><div class="si-kcal">${f.kcal}</div></div>`;
+    }).join('');
+  }
+
+  sug.innerHTML=html;
+  sug.classList.add('on');
+  sugOpen=true;
 }
 
 function escolherAlimento(idx){
@@ -928,6 +1022,21 @@ function escolherAlimento(idx){
   q('qty-wrap').classList.add('on');
   q('f-qty').value=100;
   q('qty-ref').textContent='base 100g → '+selF[1]+' kcal';
+}
+
+function escolherAlimentoAPI(idx){
+  const f=apiResults[idx];
+  if(!f)return;
+  // Converte para o formato do selF
+  selF=[f.name, f.kcal, f.prot, f.carb, f.fat];
+  q('f-name').value=f.name;
+  q('sug').classList.remove('on');sugOpen=false;
+  q('ai-box').classList.add('on');
+  set('ai-fn',f.name);set('ai-kc',f.kcal);
+  set('ai-pt',f.prot+'g');set('ai-cb',f.carb+'g');set('ai-ft',f.fat+'g');
+  q('qty-wrap').classList.add('on');
+  q('f-qty').value=100;
+  q('qty-ref').textContent='base 100g → '+f.kcal+' kcal';
 }
 
 function updQty(){
@@ -1299,6 +1408,8 @@ window.doLogout=doLogout;
 window.pg=pg;
 window.srch=srch;
 window.escolherAlimento=escolherAlimento;
+window.escolherAlimentoAPI=escolherAlimentoAPI;
+window.receberResultadoAPI=receberResultadoAPI;
 window.updQty=updQty;
 window.tglMan=tglMan;
 window.addFood=addFood;

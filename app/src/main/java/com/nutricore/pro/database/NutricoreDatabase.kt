@@ -37,7 +37,6 @@ abstract class NutricoreDatabase : RoomDatabase() {
                     NutricoreDatabase::class.java,
                     "nutricore_database"
                 )
-                    .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance
                 instance

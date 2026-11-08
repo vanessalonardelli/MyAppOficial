@@ -2,6 +2,7 @@ package com.nutricore.pro
 
 import android.annotation.SuppressLint
 import android.os.Bundle
+import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -14,16 +15,16 @@ import com.nutricore.pro.repository.PerfilRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
 import java.net.URL
 import java.time.LocalDate
 
 class MainActivity : ComponentActivity() {
 
     private lateinit var webView: WebView
-    private lateinit var perfilRepository: PerfilRepository
-    private lateinit var alimentoRepository: AlimentoRepository
-    private lateinit var atividadeRepository: AtividadeRepository
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -32,9 +33,9 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         val db = NutricoreDatabase.getInstance(this)
-        perfilRepository = PerfilRepository(db.perfilUsuarioDao())
-        alimentoRepository = AlimentoRepository(db.alimentoConsumoDao())
-        atividadeRepository = AtividadeRepository(db.atividadeDao())
+        val perfilRepository = PerfilRepository(db.perfilUsuarioDao())
+        val alimentoRepository = AlimentoRepository(db.alimentoConsumoDao())
+        val atividadeRepository = AtividadeRepository(db.atividadeDao())
 
         webView = WebView(this).apply {
             webViewClient = WebViewClient()
@@ -45,19 +46,10 @@ class MainActivity : ComponentActivity() {
             settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
             settings.allowUniversalAccessFromFileURLs = true
 
-            addJavascriptInterface(
-                ApiInterface(this@MainActivity, this),
-                "AndroidAPI"
-            )
+            addJavascriptInterface(ApiInterface(this@MainActivity, this), "AndroidAPI")
 
             addJavascriptInterface(
-                RoomInterface(
-                    this@MainActivity,
-                    this,
-                    perfilRepository,
-                    alimentoRepository,
-                    atividadeRepository
-                ),
+                RoomInterface(perfilRepository, alimentoRepository, atividadeRepository),
                 "RoomDB"
             )
 
@@ -93,9 +85,7 @@ class ApiInterface(
                         .replace("'", "\\'")
                         .replace("\n", "")
                         .replace("\r", "")
-                    webView.evaluateJavascript(
-                        "receberResultadoAPI('$escapado')", null
-                    )
+                    webView.evaluateJavascript("receberResultadoAPI('$escapado')", null)
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
@@ -107,85 +97,112 @@ class ApiInterface(
 }
 
 class RoomInterface(
-    private val activity: ComponentActivity,
-    private val webView: WebView,
     private val perfilRepo: PerfilRepository,
     private val alimentoRepo: AlimentoRepository,
     private val atividadeRepo: AtividadeRepository
 ) {
+
+    private fun <T> executar(padrao: T, bloco: suspend () -> T): T =
+        try {
+            runBlocking(Dispatchers.IO) { bloco() }
+        } catch (e: Exception) {
+            Log.e("RoomInterface", "Falha no banco local: ${e.javaClass.simpleName}")
+            padrao
+        }
+
+    @JavascriptInterface
+    fun garantirPerfil(uid: String, nome: String): Boolean =
+        executar(false) {
+            perfilRepo.garantirPerfil(uid, nome)
+            true
+        }
+
     @JavascriptInterface
     fun salvarPerfil(
         uid: String, nome: String, peso: Double, altura: Int,
         idade: Int, sexo: String, nivelAtividade: Double,
         objetivo: String, tmb: Int, tdee: Int, metaCalorias: Int
-    ) {
-        CoroutineScope(Dispatchers.IO).launch {
+    ): Boolean =
+        executar(false) {
             perfilRepo.salvar(uid, nome, peso, altura, idade, sexo, nivelAtividade, objetivo, tmb, tdee, metaCalorias)
+            true
         }
-    }
 
     @JavascriptInterface
     fun salvarAlimento(
         uid: String, nome: String, quantidade: Double,
         calorias: Int, proteina: Double, carboidrato: Double,
         gordura: Double, refeicao: String, horario: String
-    ) {
-        val data = LocalDate.now().toString()
-        CoroutineScope(Dispatchers.IO).launch {
-            alimentoRepo.salvar(uid, nome, quantidade, calorias, proteina, carboidrato, gordura, refeicao, horario, data)
+    ): Long =
+        executar(-1L) {
+            alimentoRepo.salvar(
+                uid, nome, quantidade, calorias, proteina, carboidrato,
+                gordura, refeicao, horario, LocalDate.now().toString()
+            )
         }
-    }
 
     @JavascriptInterface
     fun salvarAtividade(
         uid: String, nome: String, duracaoMin: Int,
         met: Double, caloriasGastas: Int
-    ) {
-        val data = LocalDate.now().toString()
-        CoroutineScope(Dispatchers.IO).launch {
-            atividadeRepo.salvar(uid, nome, duracaoMin, met, caloriasGastas, data)
+    ): Long =
+        executar(-1L) {
+            atividadeRepo.salvar(uid, nome, duracaoMin, met, caloriasGastas, LocalDate.now().toString())
         }
-    }
 
     @JavascriptInterface
-    fun buscarAlimentosDoDia(uid: String) {
-        val data = LocalDate.now().toString()
-        CoroutineScope(Dispatchers.IO).launch {
-            val alimentos = alimentoRepo.buscarPorData(uid, data)
-            val json = alimentos.joinToString(",", "[", "]") { a ->
-                """{"id":${a.id},"nome":"${a.nome}","quantidade":${a.quantidade},"calorias":${a.calorias},"proteina":${a.proteina},"carboidrato":${a.carboidrato},"gordura":${a.gordura},"refeicao":"${a.refeicao}","horario":"${a.horario}"}"""
+    fun buscarAlimentosDoDia(uid: String): String =
+        executar("[]") {
+            val lista = alimentoRepo.buscarPorData(uid, LocalDate.now().toString())
+            val array = JSONArray()
+            lista.forEach { a ->
+                array.put(
+                    JSONObject().apply {
+                        put("id", a.id)
+                        put("nome", a.nome)
+                        put("quantidade", a.quantidade)
+                        put("calorias", a.calorias)
+                        put("proteina", a.proteina)
+                        put("carboidrato", a.carboidrato)
+                        put("gordura", a.gordura)
+                        put("refeicao", a.refeicao)
+                        put("horario", a.horario)
+                    }
+                )
             }
-            withContext(Dispatchers.Main) {
-                webView.evaluateJavascript("receberAlimentosRoom($json)", null)
-            }
+            array.toString()
         }
-    }
 
     @JavascriptInterface
-    fun buscarAtividadesDoDia(uid: String) {
-        val data = LocalDate.now().toString()
-        CoroutineScope(Dispatchers.IO).launch {
-            val atividades = atividadeRepo.buscarPorData(uid, data)
-            val json = atividades.joinToString(",", "[", "]") { a ->
-                """{"id":${a.id},"nome":"${a.nome}","duracaoMin":${a.duracaoMin},"met":${a.met},"caloriasGastas":${a.caloriasGastas}}"""
+    fun buscarAtividadesDoDia(uid: String): String =
+        executar("[]") {
+            val lista = atividadeRepo.buscarPorData(uid, LocalDate.now().toString())
+            val array = JSONArray()
+            lista.forEach { a ->
+                array.put(
+                    JSONObject().apply {
+                        put("id", a.id)
+                        put("nome", a.nome)
+                        put("duracaoMin", a.duracaoMin)
+                        put("met", a.met)
+                        put("caloriasGastas", a.caloriasGastas)
+                    }
+                )
             }
-            withContext(Dispatchers.Main) {
-                webView.evaluateJavascript("receberAtividadesRoom($json)", null)
-            }
+            array.toString()
         }
-    }
 
     @JavascriptInterface
-    fun deletarAlimento(id: Int, uid: String) {
-        CoroutineScope(Dispatchers.IO).launch {
+    fun deletarAlimento(id: Int, uid: String): Boolean =
+        executar(false) {
             alimentoRepo.deletar(id, uid)
+            true
         }
-    }
 
     @JavascriptInterface
-    fun deletarAtividade(id: Int, uid: String) {
-        CoroutineScope(Dispatchers.IO).launch {
+    fun deletarAtividade(id: Int, uid: String): Boolean =
+        executar(false) {
             atividadeRepo.deletar(id, uid)
+            true
         }
-    }
 }

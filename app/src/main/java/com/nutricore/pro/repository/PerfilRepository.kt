@@ -6,6 +6,28 @@ import java.time.LocalDateTime
 
 class PerfilRepository(private val dao: PerfilUsuarioDao) {
 
+    suspend fun garantirPerfil(uid: String, nome: String) {
+        require(uid.isNotBlank()) { "uid inválido" }
+        val agora = LocalDateTime.now().toString()
+        dao.criarSeNaoExistir(
+            PerfilUsuarioEntity(
+                uid = uid,
+                nome = nome,
+                peso = 0.0,
+                altura = 0,
+                idade = 0,
+                sexo = "",
+                nivelAtividade = 1.2,
+                objetivo = "maintain",
+                tmb = 0,
+                tdee = 0,
+                metaCalorias = 2000,
+                criadoEm = agora,
+                atualizadoEm = agora
+            )
+        )
+    }
+
     suspend fun salvar(
         uid: String,
         nome: String,
@@ -19,23 +41,30 @@ class PerfilRepository(private val dao: PerfilUsuarioDao) {
         tdee: Int,
         metaCalorias: Int
     ) {
+        require(uid.isNotBlank()) { "uid inválido" }
+        require(nome.isNotBlank()) { "nome inválido" }
+        require(peso > 0 && altura > 0 && idade > 0) { "medidas inválidas" }
+        require(sexo == "M" || sexo == "F") { "sexo inválido" }
+
         val agora = LocalDateTime.now().toString()
-        val perfil = PerfilUsuarioEntity(
-            uid = uid,
-            nome = nome,
-            peso = peso,
-            altura = altura,
-            idade = idade,
-            sexo = sexo,
-            nivelAtividade = nivelAtividade,
-            objetivo = objetivo,
-            tmb = tmb,
-            tdee = tdee,
-            metaCalorias = metaCalorias,
-            criadoEm = agora,
-            atualizadoEm = agora
+        val existente = dao.buscarPorUid(uid)
+        dao.salvar(
+            PerfilUsuarioEntity(
+                uid = uid,
+                nome = nome,
+                peso = peso,
+                altura = altura,
+                idade = idade,
+                sexo = sexo,
+                nivelAtividade = nivelAtividade,
+                objetivo = objetivo,
+                tmb = tmb,
+                tdee = tdee,
+                metaCalorias = metaCalorias,
+                criadoEm = existente?.criadoEm ?: agora,
+                atualizadoEm = agora
+            )
         )
-        dao.inserirOuAtualizar(perfil)
     }
 
     suspend fun buscar(uid: String): PerfilUsuarioEntity? {

@@ -1,13 +1,18 @@
 package com.nutricore.pro
 
 import android.annotation.SuppressLint
+import android.graphics.Color
 import android.os.Bundle
 import android.util.Log
 import android.webkit.JavascriptInterface
+import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import com.nutricore.pro.database.NutricoreDatabase
 import com.nutricore.pro.repository.AlimentoRepository
 import com.nutricore.pro.repository.AtividadeRepository
@@ -39,6 +44,7 @@ class MainActivity : ComponentActivity() {
 
         webView = WebView(this).apply {
             webViewClient = WebViewClient()
+            webChromeClient = WebChromeClient()
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.allowFileAccess = true
@@ -56,7 +62,32 @@ class MainActivity : ComponentActivity() {
             loadUrl("file:///android_asset/index.html")
         }
 
-        setContentView(webView)
+        val container = FrameLayout(this).apply {
+            setBackgroundColor(Color.parseColor("#060709"))
+            addView(
+                webView,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+            )
+        }
+
+        ViewCompat.setOnApplyWindowInsetsListener(container) { view, insets ->
+            val areas = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or
+                        WindowInsetsCompat.Type.displayCutout() or
+                        WindowInsetsCompat.Type.ime()
+            )
+            view.setPadding(areas.left, areas.top, areas.right, areas.bottom)
+            WindowInsetsCompat.CONSUMED
+        }
+
+        val controle = WindowCompat.getInsetsController(window, container)
+        controle.isAppearanceLightStatusBars = false
+        controle.isAppearanceLightNavigationBars = false
+
+        setContentView(container)
     }
 
     override fun onBackPressed() {

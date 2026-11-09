@@ -24,7 +24,7 @@ body { background:#060709; color:#f0f4ff; font-family:'Barlow',sans-serif; min-h
 
 /* ── LOGIN SCREEN ── */
 #login-screen {
-  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  display:none; flex-direction:column; align-items:center; justify-content:center;
   min-height:100vh; padding:24px; background:#060709;
 }
 .login-logo { display:flex; flex-direction:column; align-items:center; gap:12px; margin-bottom:36px; }
@@ -692,14 +692,14 @@ window._db = db;
 window._fbFns = { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, signOut, doc, setDoc, getDoc, collection, addDoc, getDocs, deleteDoc, query, where };
 
 // ── Monitora estado do login ──
-onAuthStateChanged(auth, async (user) => {
+onAuthStateChanged(auth, (user) => {
   if (user) {
     window._uid = user.uid;
     window._userEmail = user.email;
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app-screen').style.display = 'block';
-    await loadUserData();
-    initApp();
+    prepararDados();
+    sincronizarNuvem();
   } else {
     window._uid = null;
     document.getElementById('login-screen').style.display = 'flex';
@@ -707,30 +707,55 @@ onAuthStateChanged(auth, async (user) => {
   }
 });
 
-// ── Carrega dados do Firestore ──
-async function loadUserData() {
+function comLimite(promessa, ms) {
+  return Promise.race([
+    promessa,
+    new Promise((_, rejeitar) => setTimeout(() => rejeitar(new Error('timeout')), ms))
+  ]);
+}
+
+async function sincronizarNuvem() {
+  const { doc, getDoc, collection, getDocs, query, where } = window._fbFns;
+  const db = window._db;
+  const uid = window._uid;
+
   try {
-    const { doc, getDoc, collection, getDocs } = window._fbFns;
-    const db = window._db;
-    const uid = window._uid;
+    const profDoc = await comLimite(getDoc(doc(db, 'users', uid, 'data', 'profile')), 8000);
+    if (uid === window._uid && profDoc.exists()) {
+      const p = profDoc.data();
+      if (p.gc) {
+        ST.profile = p;
+        gravarPerfilNoRoom(p);
+        updProfUI();
+        updDash();
+      }
+    }
+  } catch (e) {
+    console.log('Perfil da nuvem indisponível');
+  }
 
-    // Perfil
-    const profDoc = await getDoc(doc(db, 'users', uid, 'data', 'profile'));
-    if (profDoc.exists()) ST.profile = profDoc.data();
-
-    // Alimentos
-    const foodsSnap = await getDocs(collection(db, 'users', uid, 'foods'));
-    ST.foods = foodsSnap.docs.map(d => ({...d.data(), _docId: d.id}));
-
-    // Atividades
-    const actsSnap = await getDocs(collection(db, 'users', uid, 'activities'));
-    ST.activities = actsSnap.docs.map(d => ({...d.data(), _docId: d.id}));
-
-  } catch(e) {
-    console.error('Erro ao carregar dados:', e);
+  try {
+    const dia = hoje();
+    if (!ST.foods.length) {
+      const snap = await comLimite(getDocs(query(collection(db, 'users', uid, 'foods'), where('data', '==', dia))), 8000);
+      if (uid === window._uid && !ST.foods.length) {
+        snap.docs.forEach(d => restaurarAlimento({ ...d.data(), _docId: d.id }));
+      }
+    }
+    if (!ST.activities.length) {
+      const snap = await comLimite(getDocs(query(collection(db, 'users', uid, 'activities'), where('data', '==', dia))), 8000);
+      if (uid === window._uid && !ST.activities.length) {
+        snap.docs.forEach(d => restaurarAtividade({ ...d.data(), _docId: d.id }));
+      }
+    }
+    rndFoods();
+    rndActs();
+    updDash();
+  } catch (e) {
+    console.log('Dados do dia na nuvem indisponíveis');
   }
 }
-window._loadUserData = loadUserData;
+
 </script>
 
 <script>
@@ -809,6 +834,86 @@ function toast(msg,err=false){
 function calcTMB(w,h,a,s){return s==='M'?10*w+6.25*h-5*a+5:10*w+6.25*h-5*a-161;}
 function norm(s){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');}
 
+function hoje(){
+  const d=new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function temRoom(){return typeof RoomDB!=='undefined';}
+
+function roomLista(nomeFuncao){
+  if(!temRoom())return null;
+  try{return JSON.parse(RoomDB[nomeFuncao](window._uid));}catch(e){return null;}
+}
+
+function gravarPerfilNoRoom(p){
+  if(!temRoom())return true;
+  try{
+    return RoomDB.salvarPerfil(window._uid,p.name,p.weight,Math.round(p.height),Math.round(p.age),p.sex,p.act,p.goal,p.tmb,p.tdee,p.gc[p.goal]);
+  }catch(e){return false;}
+}
+
+function iconeDe(nome){return (nome.match(/\p{Extended_Pictographic}/u)||['💪'])[0];}
+
+function prepararDados(){
+  if(temRoom()){
+    const nome=ST.profile?.name||(window._userEmail||'').split('@')[0]||'Usuário';
+    try{RoomDB.garantirPerfil(window._uid,nome);}catch(e){console.error('Banco local indisponível');}
+  }
+  const dia=hoje();
+  ST.foods=(roomLista('buscarAlimentosDoDia')||[]).map((x,i)=>({
+    id:Date.now()+i,roomId:x.id,name:x.nome,qty:x.quantidade,cal:x.calorias,
+    prot:x.proteina,carb:x.carboidrato,fat:x.gordura,meal:x.refeicao,time:x.horario,data:dia
+  }));
+  ST.activities=(roomLista('buscarAtividadesDoDia')||[]).map((x,i)=>({
+    id:Date.now()+1000+i,roomId:x.id,name:x.nome,dur:x.duracaoMin,met:x.met,
+    kcal:x.caloriasGastas,icon:iconeDe(x.nome),data:dia
+  }));
+  initApp();
+}
+
+function restaurarAlimento(f){
+  let roomId=-1;
+  if(temRoom()){
+    try{roomId=RoomDB.salvarAlimento(window._uid,f.name,f.qty,Math.round(f.cal),f.prot,f.carb,f.fat,f.meal,f.time);}catch(e){}
+  }
+  ST.foods.push({...f,roomId,id:Date.now()+ST.foods.length});
+}
+
+function restaurarAtividade(a){
+  let roomId=-1;
+  if(temRoom()){
+    try{roomId=RoomDB.salvarAtividade(window._uid,a.name,Math.round(a.dur),a.met,Math.round(a.kcal));}catch(e){}
+  }
+  ST.activities.push({...a,roomId,id:Date.now()+500+ST.activities.length});
+}
+
+function gravarNaNuvem(colecao,item){
+  try{
+    const {collection,addDoc}=window._fbFns;
+    addDoc(collection(window._db,'users',window._uid,colecao),item)
+      .then(ref=>{item._docId=ref.id;})
+      .catch(()=>console.log('Nuvem indisponível'));
+  }catch(e){}
+}
+
+function removerItem(colecao,item){
+  if(temRoom()&&item.roomId>0){
+    try{RoomDB[colecao==='foods'?'deletarAlimento':'deletarAtividade'](item.roomId,window._uid);}catch(e){}
+  }
+  try{
+    const {doc,deleteDoc,collection,getDocs,query,where}=window._fbFns;
+    const base=['users',window._uid,colecao];
+    if(item._docId){
+      deleteDoc(doc(window._db,...base,item._docId)).catch(()=>{});
+    }else if(item.roomId>0){
+      getDocs(query(collection(window._db,...base),where('roomId','==',item.roomId),where('data','==',item.data)))
+        .then(snap=>snap.docs.forEach(d=>deleteDoc(d.ref)))
+        .catch(()=>{});
+    }
+  }catch(e){}
+}
+
 // ═══ LOGIN UI ═══
 function switchTab(tab){
   q('form-login').classList.toggle('on', tab==='login');
@@ -865,9 +970,8 @@ async function doForgot(){
 
 async function doLogout(){
   if(!confirm('Deseja sair?'))return;
-  ST={profile:null,foods:[],activities:[]};
   await window._fbFns.signOut(window._auth);
-  toast('Até logo!');
+  location.reload();
 }
 
 function showErr(form, msg){
@@ -1092,14 +1196,13 @@ async function addFood(){
     if(!cal){toast('Selecione um alimento ou use o modo manual',true);return;}
   }
   const meal=q('f-meal').value,time=q('f-time').value||nowT();
-  const food={id:Date.now(),name,qty,cal,prot,carb,fat,meal,time,data:new Date().toISOString().split('T')[0]};
+  const food={id:Date.now(),roomId:-1,name,qty,cal:Math.round(cal),prot,carb,fat,meal,time,data:hoje()};
 
-  // Salva no Firestore
-  try{
-    const {collection,addDoc}=window._fbFns;
-    const docRef=await addDoc(collection(window._db,'users',window._uid,'foods'),food);
-    food._docId=docRef.id;
-  }catch(e){console.error('Erro ao salvar alimento:',e);}
+  let falhouRoom=false;
+  if(temRoom()){
+    try{food.roomId=RoomDB.salvarAlimento(window._uid,name,qty,food.cal,prot,carb,fat,meal,time);}catch(e){}
+    falhouRoom=food.roomId<0;
+  }
 
   ST.foods.push(food);
   rndFoods();updDash();
@@ -1107,29 +1210,24 @@ async function addFood(){
   ['m-cal','m-prot','m-carb','m-fat'].forEach(id=>q(id).value='');
   q('ai-box').classList.remove('on');q('qty-wrap').classList.remove('on');
   selF=null;
-  toast('✓ Alimento adicionado!');
+  if(falhouRoom)toast('Adicionado, mas falhou no banco do aparelho',true);
+  else toast('✓ Alimento adicionado!');
+
+  gravarNaNuvem('foods',food);
 }
 
-async function delFood(id){
+function delFood(id){
   const food=ST.foods.find(f=>f.id===id);
-  if(food?._docId){
-    try{
-      const {doc,deleteDoc}=window._fbFns;
-      await deleteDoc(doc(window._db,'users',window._uid,'foods',food._docId));
-    }catch(e){console.error('Erro ao deletar:',e);}
-  }
   ST.foods=ST.foods.filter(f=>f.id!==id);
   rndFoods();updDash();
+  if(food)removerItem('foods',food);
 }
 
-async function clrFoods(){
-  if(!confirm('Limpar todos os alimentos?'))return;
-  try{
-    const {collection,getDocs,doc,deleteDoc}=window._fbFns;
-    const snap=await getDocs(collection(window._db,'users',window._uid,'foods'));
-    for(const d of snap.docs) await deleteDoc(doc(window._db,'users',window._uid,'foods',d.id));
-  }catch(e){console.error(e);}
+function clrFoods(){
+  if(!confirm('Limpar os alimentos de hoje?'))return;
+  const lista=[...ST.foods];
   ST.foods=[];rndFoods();updDash();toast('Limpo!');
+  lista.forEach(f=>removerItem('foods',f));
 }
 
 function rndFoods(){
@@ -1177,39 +1275,34 @@ async function addAct(){
   const dur=parseFloat(q('a-dur').value),met=parseFloat(q('a-met').value);
   if(!name||!dur||!met){toast('Preencha todos os campos',true);return;}
   const kcal=prvAct();
-  const icon=(name.match(/\p{Emoji}/u)||['💪'])[0];
-  const act={id:Date.now(),name,dur,met,kcal,icon,data:new Date().toISOString().split('T')[0]};
+  const act={id:Date.now(),roomId:-1,name,dur,met,kcal,icon:iconeDe(name),data:hoje()};
 
-  try{
-    const {collection,addDoc}=window._fbFns;
-    const docRef=await addDoc(collection(window._db,'users',window._uid,'activities'),act);
-    act._docId=docRef.id;
-  }catch(e){console.error('Erro ao salvar atividade:',e);}
+  let falhouRoom=false;
+  if(temRoom()){
+    try{act.roomId=RoomDB.salvarAtividade(window._uid,name,Math.round(dur),met,kcal);}catch(e){}
+    falhouRoom=act.roomId<0;
+  }
 
   ST.activities.push(act);
-  rndActs();updDash();toast('✓ Atividade registrada!');
+  rndActs();updDash();
+  if(falhouRoom)toast('Registrada, mas falhou no banco do aparelho',true);
+  else toast('✓ Atividade registrada!');
+
+  gravarNaNuvem('activities',act);
 }
 
-async function delAct(id){
+function delAct(id){
   const act=ST.activities.find(a=>a.id===id);
-  if(act?._docId){
-    try{
-      const {doc,deleteDoc}=window._fbFns;
-      await deleteDoc(doc(window._db,'users',window._uid,'activities',act._docId));
-    }catch(e){console.error(e);}
-  }
   ST.activities=ST.activities.filter(a=>a.id!==id);
   rndActs();updDash();
+  if(act)removerItem('activities',act);
 }
 
-async function clrActs(){
-  if(!confirm('Limpar?'))return;
-  try{
-    const {collection,getDocs,doc,deleteDoc}=window._fbFns;
-    const snap=await getDocs(collection(window._db,'users',window._uid,'activities'));
-    for(const d of snap.docs) await deleteDoc(doc(window._db,'users',window._uid,'activities',d.id));
-  }catch(e){console.error(e);}
+function clrActs(){
+  if(!confirm('Limpar as atividades de hoje?'))return;
+  const lista=[...ST.activities];
   ST.activities=[];rndActs();updDash();toast('Limpo!');
+  lista.forEach(a=>removerItem('activities',a));
 }
 
 function rndActs(){
@@ -1226,7 +1319,7 @@ function rndActs(){
 }
 
 // ═══ PROFILE (com Firestore) ═══
-async function saveProf(){
+function saveProf(){
   const name=q('p-name').value.trim(),age=+q('p-age').value,wt=+q('p-wt').value;
   const ht=+q('p-ht').value,sx=q('p-sx').value,act=+q('p-act').value,goal=q('p-goal').value;
   if(!name||!age||!wt||!ht||!sx){toast('Preencha todos os campos',true);return;}
@@ -1234,16 +1327,20 @@ async function saveProf(){
   const gc={lose:tdee-500,maintain:tdee,gain:tdee+300};
   ST.profile={name,age,weight:wt,height:ht,sex:sx,act,goal,tmb,tdee,gc};
 
+  const okRoom=gravarPerfilNoRoom(ST.profile);
+
   try{
     const {doc,setDoc}=window._fbFns;
-    await setDoc(doc(window._db,'users',window._uid,'data','profile'),ST.profile);
-  }catch(e){console.error('Erro ao salvar perfil:',e);}
+    setDoc(doc(window._db,'users',window._uid,'data','profile'),ST.profile).catch(()=>console.log('Nuvem indisponível'));
+  }catch(e){}
 
-  updProfUI();updDash();toast('✓ Perfil salvo!');
+  updProfUI();updDash();
+  if(okRoom)toast('✓ Perfil salvo!');
+  else toast('Perfil salvo, mas falhou no banco do aparelho',true);
 }
 
 function updProfUI(){
-  const p=ST.profile;if(!p)return;
+  const p=ST.profile;if(!p||!p.gc)return;
   q('p-name').value=p.name;q('p-age').value=p.age;q('p-wt').value=p.weight;
   q('p-ht').value=p.height;q('p-sx').value=p.sex;q('p-act').value=p.act;q('p-goal').value=p.goal;
   set('p-tmb',p.tmb);set('p-tdee','TDEE: '+p.tdee+' kcal/dia');

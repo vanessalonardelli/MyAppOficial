@@ -171,6 +171,27 @@ class RoomInterface(
         }
 
     @JavascriptInterface
+    fun buscarPerfil(uid: String): String =
+        executar("") {
+            val p = perfilRepo.buscar(uid)
+            if (p == null || p.tmb <= 0) {
+                ""
+            } else {
+                JSONObject().apply {
+                    put("name", p.nome)
+                    put("age", p.idade)
+                    put("weight", p.peso)
+                    put("height", p.altura)
+                    put("sex", p.sexo)
+                    put("act", p.nivelAtividade)
+                    put("goal", p.objetivo)
+                    put("tmb", p.tmb)
+                    put("tdee", p.tdee)
+                }.toString()
+            }
+        }
+
+    @JavascriptInterface
     fun garantirPerfil(uid: String, nome: String): Boolean =
         executar(false) {
             perfilRepo.garantirPerfil(uid, nome)

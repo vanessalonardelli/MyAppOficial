@@ -715,19 +715,23 @@ function comLimite(promessa, ms) {
 }
 
 async function sincronizarNuvem() {
-  const { doc, getDoc, collection, getDocs, query, where } = window._fbFns;
+  const { doc, getDoc, setDoc, collection, getDocs, query, where } = window._fbFns;
   const db = window._db;
   const uid = window._uid;
 
   try {
-    const profDoc = await comLimite(getDoc(doc(db, 'users', uid, 'data', 'profile')), 8000);
-    if (uid === window._uid && profDoc.exists()) {
-      const p = profDoc.data();
-      if (p.gc) {
-        ST.profile = p;
-        gravarPerfilNoRoom(p);
-        updProfUI();
-        updDash();
+    if (ST.profile) {
+      setDoc(doc(db, 'users', uid, 'data', 'profile'), ST.profile).catch(() => {});
+    } else {
+      const profDoc = await comLimite(getDoc(doc(db, 'users', uid, 'data', 'profile')), 8000);
+      if (uid === window._uid && profDoc.exists()) {
+        const p = profDoc.data();
+        if (p.gc) {
+          ST.profile = p;
+          gravarPerfilNoRoom(p);
+          updProfUI();
+          updDash();
+        }
       }
     }
   } catch (e) {
@@ -853,9 +857,22 @@ function gravarPerfilNoRoom(p){
   }catch(e){return false;}
 }
 
+function lerPerfilDoRoom(){
+  if(!temRoom())return null;
+  try{
+    const texto=RoomDB.buscarPerfil(window._uid);
+    if(!texto)return null;
+    const p=JSON.parse(texto);
+    p.gc={lose:p.tdee-500,maintain:p.tdee,gain:p.tdee+300};
+    return p;
+  }catch(e){return null;}
+}
+
 function iconeDe(nome){return (nome.match(/\p{Extended_Pictographic}/u)||['💪'])[0];}
 
 function prepararDados(){
+  const salvo=lerPerfilDoRoom();
+  if(salvo)ST.profile=salvo;
   if(temRoom()){
     const nome=ST.profile?.name||(window._userEmail||'').split('@')[0]||'Usuário';
     try{RoomDB.garantirPerfil(window._uid,nome);}catch(e){console.error('Banco local indisponível');}

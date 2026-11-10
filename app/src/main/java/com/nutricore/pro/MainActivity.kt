@@ -6,6 +6,9 @@ import android.os.Bundle
 import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
@@ -13,6 +16,7 @@ import androidx.activity.ComponentActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.webkit.WebViewAssetLoader
 import com.nutricore.pro.database.NutricoreDatabase
 import com.nutricore.pro.repository.AlimentoRepository
 import com.nutricore.pro.repository.AtividadeRepository
@@ -31,6 +35,10 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var webView: WebView
 
+    companion object {
+        private const val DOMINIO_APP = "appassets.androidplatform.net"
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,15 +50,36 @@ class MainActivity : ComponentActivity() {
         val alimentoRepository = AlimentoRepository(db.alimentoConsumoDao())
         val atividadeRepository = AtividadeRepository(db.atividadeDao())
 
+        val assetLoader = WebViewAssetLoader.Builder()
+            .setDomain(DOMINIO_APP)
+            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
+            .build()
+
         webView = WebView(this).apply {
-            webViewClient = WebViewClient()
+            webViewClient = object : WebViewClient() {
+                override fun shouldInterceptRequest(
+                    view: WebView?,
+                    request: WebResourceRequest?
+                ): WebResourceResponse? {
+                    val uri = request?.url ?: return null
+                    return assetLoader.shouldInterceptRequest(uri)
+                }
+
+                override fun shouldOverrideUrlLoading(
+                    view: WebView?,
+                    request: WebResourceRequest?
+                ): Boolean {
+                    val req = request ?: return true
+                    return req.isForMainFrame && req.url.host != DOMINIO_APP
+                }
+            }
             webChromeClient = WebChromeClient()
+
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
-            settings.allowFileAccess = true
-            settings.allowContentAccess = true
-            settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-            settings.allowUniversalAccessFromFileURLs = true
+            settings.allowFileAccess = false
+            settings.allowContentAccess = false
+            settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
 
             addJavascriptInterface(ApiInterface(this@MainActivity, this), "AndroidAPI")
 
@@ -59,7 +88,7 @@ class MainActivity : ComponentActivity() {
                 "RoomDB"
             )
 
-            loadUrl("file:///android_asset/index.html")
+            loadUrl("https://$DOMINIO_APP/assets/index.html")
         }
 
         val container = FrameLayout(this).apply {

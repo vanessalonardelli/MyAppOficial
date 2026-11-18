@@ -233,8 +233,13 @@ class RoomInterface(
 
     @JavascriptInterface
     fun buscarAlimentosDoDia(uid: String): String =
+        buscarAlimentosPorData(uid, LocalDate.now().toString())
+
+    @JavascriptInterface
+    fun buscarAlimentosPorData(uid: String, data: String): String =
         executar("[]") {
-            val lista = alimentoRepo.buscarPorData(uid, LocalDate.now().toString())
+            val dia = LocalDate.parse(data).toString()
+            val lista = alimentoRepo.buscarPorData(uid, dia)
             val array = JSONArray()
             lista.forEach { a ->
                 array.put(
@@ -256,8 +261,13 @@ class RoomInterface(
 
     @JavascriptInterface
     fun buscarAtividadesDoDia(uid: String): String =
+        buscarAtividadesPorData(uid, LocalDate.now().toString())
+
+    @JavascriptInterface
+    fun buscarAtividadesPorData(uid: String, data: String): String =
         executar("[]") {
-            val lista = atividadeRepo.buscarPorData(uid, LocalDate.now().toString())
+            val dia = LocalDate.parse(data).toString()
+            val lista = atividadeRepo.buscarPorData(uid, dia)
             val array = JSONArray()
             lista.forEach { a ->
                 array.put(

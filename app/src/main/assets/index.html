@@ -655,6 +655,11 @@ select option { background:#191d28; }
   <!-- GRÁFICOS -->
   <div id="page-graficos" class="page">
     <div class="ph"><div class="ph-tag">análise</div><div class="ph-title">GRÁFICOS</div></div>
+    <div class="card">
+      <div class="ctitle"><div class="tico">🗓️</div>Últimos 7 dias</div>
+      <div class="chart-wrap"><canvas id="ch-sem"></canvas></div>
+      <div id="ch-sem-info" style="font-family:var(--fm);font-size:10px;color:var(--grey);margin-top:10px;text-align:center">—</div>
+    </div>
     <div class="card"><div class="ctitle"><div class="tico">🔥</div>Calorias</div><div class="chart-wrap"><canvas id="ch-cal"></canvas></div></div>
     <div class="card"><div class="ctitle"><div class="tico">🧬</div>Distribuição de Macros</div><div class="chart-wrap"><canvas id="ch-mac"></canvas></div></div>
     <div class="card"><div class="ctitle"><div class="tico">🍱</div>Macros por Alimento</div><div class="chart-wrap2"><canvas id="ch-foods"></canvas></div></div>
@@ -841,6 +846,47 @@ function norm(s){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f
 function hoje(){
   const d=new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function esc(t){
+  return String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function destacar(nome,termo){
+  const i=termo?nome.toLowerCase().indexOf(termo.toLowerCase()):-1;
+  if(i<0)return esc(nome);
+  return esc(nome.slice(0,i))+'<span class="si-hi">'+esc(nome.slice(i,i+termo.length))+'</span>'+esc(nome.slice(i+termo.length));
+}
+
+function emojiRef(t){
+  return (String(t==null?'':t).match(/^\p{Extended_Pictographic}\uFE0F?/u)||[''])[0];
+}
+
+function dataMais(dia,delta){
+  const [a,m,d]=dia.split('-').map(Number);
+  const x=new Date(a,m-1,d+delta);
+  return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;
+}
+
+function dataBR(dia){const [a,m,d]=dia.split('-');return `${d}/${m}/${a}`;}
+
+function roomPorData(nomeFuncao,dia){
+  if(!temRoom())return [];
+  try{return JSON.parse(RoomDB[nomeFuncao](window._uid,dia));}catch(e){return [];}
+}
+
+function resumoDoDia(dia){
+  const f=roomPorData('buscarAlimentosPorData',dia);
+  const a=roomPorData('buscarAtividadesPorData',dia);
+  const soma=campo=>f.reduce((t,x)=>t+(Number(x[campo])||0),0);
+  return {
+    f,a,
+    cal:Math.round(soma('calorias')),
+    prot:soma('proteina'),
+    carb:soma('carboidrato'),
+    fat:soma('gordura'),
+    gasto:Math.round(a.reduce((t,x)=>t+(Number(x.caloriasGastas)||0),0))
+  };
 }
 
 function temRoom(){return typeof RoomDB!=='undefined';}
@@ -1113,7 +1159,7 @@ function renderSug(localMatches, apiMatches, val){
     html+=`<div style="padding:6px 14px;font-family:var(--fm);font-size:8px;color:var(--grey);text-transform:uppercase;letter-spacing:2px;background:var(--s4)">📦 Banco Local</div>`;
     html+=localMatches.map(f=>{
       const idx=DB.indexOf(f);
-      const hi=f[0].replace(new RegExp('('+safe+')','gi'),'<span class="si-hi">$1</span>');
+      const hi=destacar(f[0],val);
       return`<div class="si" onclick="escolherAlimento(${idx})"><div><div class="si-name">${hi}</div><div class="si-meta">P:${f[2]}g C:${f[3]}g G:${f[4]}g — 100g</div></div><div class="si-kcal">${f[1]}</div></div>`;
     }).join('');
   }
@@ -1122,8 +1168,8 @@ function renderSug(localMatches, apiMatches, val){
   if(apiMatches.length){
     html+=`<div style="padding:6px 14px;font-family:var(--fm);font-size:8px;color:var(--cyan);text-transform:uppercase;letter-spacing:2px;background:var(--s4)">🌐 Open Food Facts</div>`;
     html+=apiMatches.map((f,i)=>{
-      const hi=f.name.replace(new RegExp('('+safe+')','gi'),'<span class="si-hi">$1</span>');
-      const sub=f.brand?`${f.brand} · `:''
+      const hi=destacar(f.name,val);
+      const sub=f.brand?`${esc(f.brand)} · `:''
       return`<div class="si" onclick="escolherAlimentoAPI(${i})"><div><div class="si-name">${hi}</div><div class="si-meta">${sub}P:${f.prot}g C:${f.carb}g G:${f.fat}g — 100g</div></div><div class="si-kcal">${f.kcal}</div></div>`;
     }).join('');
   }
@@ -1256,10 +1302,10 @@ function rndFoods(){
   if(!ST.foods.length){list.innerHTML='<div class="empty"><div class="empty-ic">🍽️</div>Adicione alimentos</div>';return;}
   list.innerHTML=ST.foods.map(f=>`
     <div class="fi">
-      <div style="font-size:16px;flex-shrink:0">${f.meal[0]}</div>
+      <div style="font-size:16px;flex-shrink:0">${esc(emojiRef(f.meal))}</div>
       <div class="fi-info">
-        <div class="fi-name">${f.name}</div>
-        <div class="fi-sub">${f.time} · ${f.qty}g</div>
+        <div class="fi-name">${esc(f.name)}</div>
+        <div class="fi-sub">${esc(f.time)} · ${esc(f.qty)}g</div>
         <div class="fi-mac">
           <span style="color:var(--cyan)">P:${f.prot}g</span>
           <span style="color:#ffd166">C:${f.carb}g</span>
@@ -1328,8 +1374,8 @@ function rndActs(){
   if(!ST.activities.length){list.innerHTML='<div class="empty"><div class="empty-ic">💤</div>Nenhuma atividade</div>';return;}
   list.innerHTML=ST.activities.map(a=>`
     <div class="ait">
-      <div class="ait-ico">${a.icon}</div>
-      <div class="ait-info"><div class="ait-nm">${a.name}</div><div class="ait-mt">${a.dur} min · MET ${a.met}</div></div>
+      <div class="ait-ico">${esc(a.icon)}</div>
+      <div class="ait-info"><div class="ait-nm">${esc(a.name)}</div><div class="ait-mt">${a.dur} min · MET ${a.met}</div></div>
       <div class="ait-kc">−${a.kcal}</div>
       <button class="fi-del" onclick="delAct(${a.id})">×</button>
     </div>`).join('');
@@ -1486,10 +1532,10 @@ function updDash(){
   }).join('')+'</div>';
   const df=q('d-foods');
   df.innerHTML=!ST.foods.length?'<div class="empty"><div class="empty-ic">🥗</div>Nenhum alimento</div>':
-    ST.foods.slice(-4).reverse().map(f=>`<div class="fi"><div style="font-size:14px">${f.meal[0]}</div><div class="fi-info" style="flex:1"><div class="fi-name">${f.name}</div></div><div class="fi-kcal">${f.cal}</div></div>`).join('');
+    ST.foods.slice(-4).reverse().map(f=>`<div class="fi"><div style="font-size:14px">${esc(emojiRef(f.meal))}</div><div class="fi-info" style="flex:1"><div class="fi-name">${esc(f.name)}</div></div><div class="fi-kcal">${f.cal}</div></div>`).join('');
   const da=q('d-acts');
   da.innerHTML=!ST.activities.length?'<div class="empty"><div class="empty-ic">💤</div>Nenhuma atividade</div>':
-    ST.activities.slice(-3).reverse().map(a=>`<div class="fi red-border"><div style="font-size:14px">${a.icon}</div><div class="fi-info" style="flex:1"><div class="fi-name">${a.name}</div></div><div style="font-family:var(--fh);font-size:17px;font-weight:900;color:var(--red)">−${a.kcal}</div></div>`).join('');
+    ST.activities.slice(-3).reverse().map(a=>`<div class="fi red-border"><div style="font-size:14px">${esc(a.icon)}</div><div class="fi-info" style="flex:1"><div class="fi-name">${esc(a.name)}</div></div><div style="font-family:var(--fh);font-size:17px;font-weight:900;color:var(--red)">−${a.kcal}</div></div>`).join('');
 }
 
 // ═══ CHARTS ═══
@@ -1499,6 +1545,19 @@ function renderCharts(){
   const t=getFT(),out=getAT(),p=ST.profile,target=p?.gc[p.goal]||0,net=Math.round(t.cal-out);
   const gc='rgba(255,255,255,.05)',tc='#6b7590';
   Chart.defaults.color=tc;Chart.defaults.font.family="'Share Tech Mono',monospace";Chart.defaults.font.size=10;
+  const dia0=hoje();
+  const dias=[];
+  for(let i=6;i>=0;i--)dias.push(dataMais(dia0,-i));
+  const res=dias.map(d=>resumoDoDia(d));
+  const conjuntos=[
+    {type:'bar',label:'Ingerido',data:res.map(r=>r.cal),backgroundColor:'rgba(200,255,0,.75)',borderColor:'#c8ff00',borderWidth:2,borderRadius:6},
+    {type:'bar',label:'Gasto',data:res.map(r=>r.gasto),backgroundColor:'rgba(255,59,48,.6)',borderColor:'#ff3b30',borderWidth:2,borderRadius:6}
+  ];
+  if(target>0)conjuntos.push({type:'line',label:'Meta',data:dias.map(()=>target),borderColor:'#00d4ff',borderDash:[6,4],borderWidth:2,pointRadius:0,fill:false});
+  CH.sem=new Chart(q('ch-sem'),{data:{labels:dias.map(d=>dataBR(d).slice(0,5)),datasets:conjuntos},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{padding:8,boxWidth:8}}},scales:{x:{grid:{color:gc}},y:{grid:{color:gc},beginAtZero:true}}}});
+  const comRegistro=res.filter(r=>r.f.length);
+  const media=comRegistro.length?Math.round(comRegistro.reduce((t,r)=>t+r.cal,0)/comRegistro.length):0;
+  set('ch-sem-info',comRegistro.length?`Média nos dias com registro: ${media} kcal (${comRegistro.length} de 7 dias)`:'Sem registros nos últimos 7 dias');
   CH.cal=new Chart(q('ch-cal'),{type:'bar',data:{labels:['INGERIDO','GASTO','META'],datasets:[{data:[Math.round(t.cal),Math.round(out),target],backgroundColor:['rgba(200,255,0,.75)','rgba(255,59,48,.75)','rgba(0,212,255,.35)'],borderColor:['#c8ff00','#ff3b30','#00d4ff'],borderWidth:2,borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:gc}},y:{grid:{color:gc}}}}});
   CH.mac=new Chart(q('ch-mac'),{type:'doughnut',data:{labels:['Proteína','Carboidrato','Gordura'],datasets:[{data:[Math.round(t.prot*4)||0,Math.round(t.carb*4)||0,Math.round(t.fat*9)||0],backgroundColor:['rgba(0,212,255,.8)','rgba(255,209,102,.8)','rgba(255,140,0,.8)'],borderColor:['#00d4ff','#ffd166','#ff8c00'],borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'bottom',labels:{padding:12,boxWidth:10,color:tc}}}}});
   CH.foods=new Chart(q('ch-foods'),{type:'bar',data:{labels:ST.foods.length?ST.foods.map(f=>f.name.substring(0,8)):['—'],datasets:[{label:'Prot',data:ST.foods.map(f=>f.prot),backgroundColor:'rgba(0,212,255,.7)',borderRadius:3},{label:'Carb',data:ST.foods.map(f=>f.carb),backgroundColor:'rgba(255,209,102,.7)',borderRadius:3},{label:'Gord',data:ST.foods.map(f=>f.fat),backgroundColor:'rgba(255,140,0,.7)',borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{padding:8,boxWidth:8}}},scales:{x:{grid:{color:gc}},y:{grid:{color:gc}}}}});

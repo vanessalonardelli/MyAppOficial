@@ -849,6 +849,37 @@ async function sincronizarNuvem() {
 </script>
 
 <script>
+// ═══ BANCO LOCAL NO NAVEGADOR ═══
+// No celular, o Kotlin entrega o RoomDB antes da página carregar e este bloco não faz nada.
+// No navegador (GitHub Pages), cria um banco local com as mesmas funções, guardado no próprio navegador.
+if(typeof window.RoomDB==='undefined'){
+  window.RoomDB=(function(){
+    const CHAVE='nc_banco_local_v1';
+    const diaHoje=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
+    function ler(){try{const x=JSON.parse(localStorage.getItem(CHAVE)||'null');if(x&&x.perfis)return x;}catch(e){}return {seq:0,perfis:{},alimentos:[],atividades:[]};}
+    function gravar(b){localStorage.setItem(CHAVE,JSON.stringify(b));}
+    function novoId(b){b.seq=(b.seq||0)+1;return b.seq;}
+    function seguro(padrao,fn){try{return fn();}catch(e){console.error('Falha no banco local do navegador',e);return padrao;}}
+    return {
+      buscarPerfil:uid=>seguro('',()=>{const p=ler().perfis[uid];if(!p||!(p.tmb>0))return '';
+        return JSON.stringify({name:p.nome,age:p.idade,weight:p.peso,height:p.altura,sex:p.sexo,act:p.nivelAtividade,goal:p.objetivo,tmb:p.tmb,tdee:p.tdee});}),
+      garantirPerfil:(uid,nome)=>seguro(false,()=>{const b=ler();if(!b.perfis[uid]){b.perfis[uid]={nome,tmb:0};gravar(b);}return true;}),
+      salvarPerfil:(uid,nome,peso,altura,idade,sexo,nivelAtividade,objetivo,tmb,tdee,metaCalorias)=>seguro(false,()=>{const b=ler();
+        b.perfis[uid]={nome,peso,altura,idade,sexo,nivelAtividade,objetivo,tmb,tdee,metaCalorias};gravar(b);return true;}),
+      salvarAlimento:(uid,nome,quantidade,calorias,proteina,carboidrato,gordura,refeicao,horario)=>seguro(-1,()=>{const b=ler();const id=novoId(b);
+        b.alimentos.push({id,uid,nome,quantidade,calorias,proteina,carboidrato,gordura,refeicao,horario,data:diaHoje()});gravar(b);return id;}),
+      salvarAtividade:(uid,nome,duracaoMin,met,caloriasGastas)=>seguro(-1,()=>{const b=ler();const id=novoId(b);
+        b.atividades.push({id,uid,nome,duracaoMin,met,caloriasGastas,data:diaHoje()});gravar(b);return id;}),
+      buscarAlimentosDoDia:uid=>window.RoomDB.buscarAlimentosPorData(uid,diaHoje()),
+      buscarAlimentosPorData:(uid,data)=>seguro('[]',()=>JSON.stringify(ler().alimentos.filter(a=>a.uid===uid&&a.data===data))),
+      buscarAtividadesDoDia:uid=>window.RoomDB.buscarAtividadesPorData(uid,diaHoje()),
+      buscarAtividadesPorData:(uid,data)=>seguro('[]',()=>JSON.stringify(ler().atividades.filter(a=>a.uid===uid&&a.data===data))),
+      deletarAlimento:(id,uid)=>seguro(false,()=>{const b=ler();b.alimentos=b.alimentos.filter(a=>!(a.id===id&&a.uid===uid));gravar(b);return true;}),
+      deletarAtividade:(id,uid)=>seguro(false,()=>{const b=ler();b.atividades=b.atividades.filter(a=>!(a.id===id&&a.uid===uid));gravar(b);return true;})
+    };
+  })();
+}
+
 // ═══ DATABASE TACO/IBGE/USDA ═══
 const DB=[
 ["Arroz branco cozido",128,2.5,28.1,0.2],["Arroz integral cozido",124,2.6,25.8,1.0],
@@ -1286,8 +1317,11 @@ function srchAPI(val, localMatches){
     if(typeof AndroidAPI !== 'undefined'){
       AndroidAPI.buscarAlimentos(val);
     } else {
-      console.log('AndroidAPI não disponível');
-      renderSug(localMatches, [], val);
+      // No navegador: consulta a Open Food Facts direto, com o mesmo endereço que o Kotlin usa
+      const url='https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(val)+
+        '&search_simple=1&action=process&json=1&lc=pt&cc=br&page_size=8&fields=product_name,nutriments,brands';
+      fetch(url).then(r=>r.ok?r.text():null).then(t=>{if(window._srchVal===val)receberResultadoAPI(t);})
+        .catch(()=>{if(window._srchVal===val)receberResultadoAPI(null);});
     }
   }catch(e){
     console.log('Erro ao chamar AndroidAPI:', e);

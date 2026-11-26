@@ -67,6 +67,11 @@ body {
 .login-err { display:none; padding:12px 14px; background:var(--redd); border:1px solid rgba(255,59,48,.3); border-radius:14px; font-size:14px; color:var(--red); margin-bottom:12px; text-align:center; }
 .login-err.on { display:block; }
 .login-forgot { font-size:14px; color:var(--limt); font-weight:600; text-align:right; cursor:pointer; margin:4px 4px 8px; display:block; }
+.pass-rules { list-style:none; display:grid; grid-template-columns:1fr 1fr; gap:6px 12px; margin:2px 8px 14px; font-size:13px; color:var(--grey); }
+.pass-rules li { display:flex; align-items:center; gap:8px; }
+.pass-rules li::before { content:""; width:8px; height:8px; border-radius:50%; border:1.5px solid var(--grey); flex-shrink:0; }
+.pass-rules li.ok { color:var(--limt); }
+.pass-rules li.ok::before { background:var(--lime); border-color:var(--lime); }
 .login-loading { display:none; text-align:center; padding:14px; font-size:14px; color:var(--grey); }
 .login-loading.on { display:block; }
 .auth-switch { margin-top:auto; padding-top:28px; }
@@ -311,7 +316,14 @@ body.light .card-lime { background:linear-gradient(160deg,#fff,rgba(200,255,0,.0
       <div id="register-err" class="login-err"></div>
       <div class="login-fg"><input id="r-name" class="login-input" type="text" placeholder="Nome" aria-label="Nome" autocomplete="name"></div>
       <div class="login-fg"><input id="r-email" class="login-input" type="email" placeholder="E-mail" aria-label="E-mail" inputmode="email" autocomplete="email"></div>
-      <div class="login-fg"><input id="r-pass" class="login-input" type="password" placeholder="Senha (mínimo 6 caracteres)" aria-label="Senha" autocomplete="new-password"></div>
+      <div class="login-fg"><input id="r-pass" class="login-input" type="password" placeholder="Senha" aria-label="Senha" autocomplete="new-password" oninput="checarSenha()" aria-describedby="pass-rules"></div>
+      <ul class="pass-rules" id="pass-rules">
+        <li data-regra="tam">8 ou mais caracteres</li>
+        <li data-regra="mai">Uma letra maiúscula</li>
+        <li data-regra="min">Uma letra minúscula</li>
+        <li data-regra="num">Um número</li>
+        <li data-regra="esp">Um caractere especial (ex.: ! @ # %)</li>
+      </ul>
       <button class="login-btn" id="btn-register" onclick="doRegister()">Criar conta</button>
       <p class="auth-alt auth-switch">Já tem conta? <span class="auth-link" onclick="switchTab('login')">Entrar</span></p>
     </div>
@@ -1192,10 +1204,21 @@ async function doLogin(){
   }
 }
 
+// Mesmas regras da política de senha do Firebase (caracteres especiais aceitos por ele)
+const ESPECIAIS=/[\^$*.\[\]{}()?"!@#%&\/\\,><':;|_~`]/;
+function regrasSenha(s){
+  return {tam:s.length>=8,mai:/[A-Z]/.test(s),min:/[a-z]/.test(s),num:/[0-9]/.test(s),esp:ESPECIAIS.test(s)};
+}
+function checarSenha(){
+  const r=regrasSenha(q('r-pass').value);
+  document.querySelectorAll('#pass-rules li').forEach(li=>li.classList.toggle('ok',!!r[li.dataset.regra]));
+}
+
 async function doRegister(){
   const name=nfc(q('r-name').value.trim()), email=q('r-email').value.trim(), pass=q('r-pass').value;
   if(!name||!email||!pass){showErr('register','Preencha todos os campos');return;}
-  if(pass.length<6){showErr('register','Senha deve ter no mínimo 6 caracteres');return;}
+  const rs=regrasSenha(pass);
+  if(!Object.values(rs).every(Boolean)){showErr('register','A senha ainda não cumpre todas as regras abaixo do campo');checarSenha();return;}
   setLoading(true);
   try{
     const cred = await window._fbFns.createUserWithEmailAndPassword(window._auth, email, pass);
@@ -1238,6 +1261,7 @@ function traduzErro(code){
     'auth/wrong-password':'Senha incorreta',
     'auth/email-already-in-use':'Este e-mail já está cadastrado',
     'auth/weak-password':'Senha muito fraca',
+    'auth/password-does-not-meet-requirements':'A senha precisa ter 8 ou mais caracteres, com maiúscula, minúscula, número e caractere especial',
     'auth/too-many-requests':'Muitas tentativas. Tente mais tarde',
     'auth/invalid-credential':'E-mail ou senha incorretos',
     'auth/network-request-failed':'Sem conexão com a internet',
@@ -1847,6 +1871,7 @@ window.calcBF=calcBF;
 window.tglGenero=tglGenero;
 window.tglSocial=tglSocial;
 window.atualizarNome=atualizarNome;
+window.checarSenha=checarSenha;
 window.abrirMenu=abrirMenu;
 window.fecharMenu=fecharMenu;
 window.alternarTema=alternarTema;
